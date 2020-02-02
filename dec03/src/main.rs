@@ -263,13 +263,13 @@ where
 }
 
 fn find_intersection_points(wires: Vec<Wire>) -> Vec<Point> {
-    let map: BTreeMap<Point, i32> = BTreeMap::new();
+    let map: BTreeMap<Point, u32> = BTreeMap::new();
     wires.into_iter()
         .map(|wire| {
             deduplicate_wire_coordinates(
                 wire.coordinates()
                     .into_iter()
-                    .filter(|point| point.x != 0 && point.y != 0)
+                    .skip(1)
                 )
         })
         .flatten()
