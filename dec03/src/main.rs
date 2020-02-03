@@ -51,56 +51,56 @@ fn offset_y(origin: isize) -> f32 {
     ((origin + Y_OFFSET) / 10) as f32
 }
 
-fn render_wires(wires: Vec<Wire>) {
-    let mut canvas = Canvas::new(1400, 1100);
-
-    for wire in wires {
-        let color = Color::random();
-        let shapes: Vec<Drawing> = wire.coordinates()
-            .windows(2)
-            .into_iter()
-            .map(|points| {
-                let p1 = points[0];
-                let p2 = points[1];
-
-                let shape = LineBuilder::new(
-                        offset_x(p1.x),
-                        offset_y(p1.y),
-                    )
-                    .line_to(offset_x(p2.x), offset_y(p2.y))
-                    .build();
-
-                Drawing::new()
-                    .with_shape(shape)
-                    .with_style(Style::stroked(5, color))
-            }).collect();
-
-        for shape in shapes {
-            canvas.display_list.add(shape);
-        }
-    }
-
-    canvas.display_list.add(
-        Drawing::new()
-            .with_shape(Shape::Circle { radius: 20 })
-            .with_xy(offset_x(1151), offset_y(134))
-            .with_style(Style::filled(Color::black()),
-    ));
-    canvas.display_list.add(
-        Drawing::new()
-            .with_shape(Shape::Circle { radius: 20 })
-            .with_xy(offset_x(0), offset_y(0))
-            .with_style(Style::filled(Color::black()),
-    ));
-
-    // save the canvas as an svg
-    render::save(
-        &canvas,
-        "tests/svg/basic_end_to_end.svg",
-        SvgRenderer::new(),
-    )
-    .expect("Failed to save");
-}
+//fn render_wires(wires: Vec<Wire>) {
+//    let mut canvas = Canvas::new(1400, 1100);
+//
+//    for wire in wires {
+//        let color = Color::random();
+//        let shapes: Vec<Drawing> = wire.coordinates()
+//            .windows(2)
+//            .into_iter()
+//            .map(|points| {
+//                let p1 = points[0];
+//                let p2 = points[1];
+//
+//                let shape = LineBuilder::new(
+//                        offset_x(p1.x),
+//                        offset_y(p1.y),
+//                    )
+//                    .line_to(offset_x(p2.x), offset_y(p2.y))
+//                    .build();
+//
+//                Drawing::new()
+//                    .with_shape(shape)
+//                    .with_style(Style::stroked(5, color))
+//            }).collect();
+//
+//        for shape in shapes {
+//            canvas.display_list.add(shape);
+//        }
+//    }
+//
+//    canvas.display_list.add(
+//        Drawing::new()
+//            .with_shape(Shape::Circle { radius: 20 })
+//            .with_xy(offset_x(1151), offset_y(134))
+//            .with_style(Style::filled(Color::black()),
+//    ));
+//    canvas.display_list.add(
+//        Drawing::new()
+//            .with_shape(Shape::Circle { radius: 20 })
+//            .with_xy(offset_x(0), offset_y(0))
+//            .with_style(Style::filled(Color::black()),
+//    ));
+//
+//    // save the canvas as an svg
+//    render::save(
+//        &canvas,
+//        "tests/svg/basic_end_to_end.svg",
+//        SvgRenderer::new(),
+//    )
+//    .expect("Failed to save");
+//}
 
 
 fn main() {
@@ -175,16 +175,61 @@ struct Wire {
     points: Vec<Point>,
 }
 
+#[derive(Debug, PartialEq, Copy, Clone, Hash, Eq, PartialOrd, Ord)]
+struct DistancePoint {
+    distance: u32,
+    point: Point,
+}
+
+fn coordinates_with_unique_distance(coordinates: Vec<Point>) -> Vec<DistancePoint> {
+    let mut unique_map: BTreeMap<Point, u32> = BTreeMap::new();
+
+    coordinates.iter().enumerate()
+        .map(|(index, point)| {
+            let distance = match unique_map.contains_key(point) {
+                true => *unique_map.get(point).unwrap(),
+                false => {
+                    unique_map.insert(*point, (index + 1) as u32);
+                    (index + 1) as u32
+                },
+            };
+
+            DistancePoint {
+                distance,
+                point: *point,
+            }
+        })
+        .collect()
+}
+
 impl Wire {
-    fn coordinates(&self) -> Vec<Point> {
+    fn coordinates(&self) -> Vec<DistancePoint> {
+        let mut unique_map: BTreeMap<Point, u32> = BTreeMap::new();
         self.points.windows(2)
             .map(|points| {
                 let coordinates = coordinates_between_points(points);
                 coordinates[1..].to_vec()
             })
             .flatten()
+
+            .enumerate()
+            .map(|(index, point)| {
+                let distance = match unique_map.contains_key(&point) {
+                    true => *unique_map.get(&point).unwrap(),
+                    false => {
+                        unique_map.insert(point, (index + 1) as u32);
+                        (index + 1) as u32
+                    },
+                };
+
+                DistancePoint {
+                    distance,
+                    point,
+                }
+            })
             .collect()
     }
+
 }
 
 impl From<Vec<DirectionDistance>> for Wire {
@@ -244,11 +289,11 @@ fn coordinates_between_points(points: &[Point]) -> Vec<Point> {
     }
 }
 
-fn deduplicate_wire_coordinates<'a, I>(coordinates: I) -> Vec<Point>
+fn deduplicate_wire_coordinates<'a, I>(coordinates: I) -> Vec<DistancePoint>
 where
-    I: Iterator<Item = Point>,
+    I: Iterator<Item = DistancePoint>,
 {
-    let unique_map: BTreeMap<Point, u32> = BTreeMap::new();
+    let unique_map: BTreeMap<DistancePoint, u32> = BTreeMap::new();
     coordinates
         .fold(unique_map, |mut acc, coordinate| {
             if !acc.contains_key(&coordinate) {
@@ -262,8 +307,15 @@ where
         .collect()
 }
 
-fn find_intersection_points(wires: Vec<Wire>) -> Vec<Point> {
-    let map: BTreeMap<Point, u32> = BTreeMap::new();
+#[derive(Clone, Copy, Debug)]
+struct IntersectionDistance {
+    distance: (u32, u32),
+    counter: u32,
+}
+
+fn find_intersection_points(wires: Vec<Wire>) -> Vec<u32> {
+    let map: BTreeMap<Point, Vec<u32>> = BTreeMap::new();
+
     wires.into_iter()
         .map(|wire| {
             deduplicate_wire_coordinates(
@@ -273,25 +325,24 @@ fn find_intersection_points(wires: Vec<Wire>) -> Vec<Point> {
                 )
         })
         .flatten()
-        .fold(map, |mut acc, coordinate| {
-            if let Some(x) = acc.get_mut(&coordinate) {
-                *x += 1;
+        .fold(map, |mut acc, distance_point| {
+            if let Some(x) = acc.get_mut(&distance_point.point) {
+                x.push(distance_point.distance);
             } else {
-                acc.insert(coordinate, 1);
+                acc.insert(distance_point.point, vec![distance_point.distance]);
             }
 
             acc
         })
         .iter()
-        .filter(|(_key, value)| *value > &1)
-        .map(|(key, _value)| *key)
+        .filter(|(_key, value)| value.len() == 2)
+        .map(|(_key, value)| (value[0] + value[1]) as u32)
         .collect()
 }
 
 fn find_closest_intersection(wires: Vec<Wire>) -> u32 {
     let mut intersection_distances: Vec<u32> = find_intersection_points(wires)
         .into_iter()
-        .map(|coordinate| coordinate.manhattan_distance())
         .collect();
     intersection_distances.sort();
     intersection_distances[0]
@@ -319,188 +370,3 @@ fn parse_path(input: &str) -> impl Iterator<Item = &str> {
     input.split(',')
 }
 
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn it_can_direction_and_distance_from_instructions() {
-        let paths = parse_path(&"R75,D30,L83,U83")
-            .map(parse_direction_and_distance)
-            .collect::<Vec<DirectionDistance>>();
-
-        assert_eq!(paths, vec![
-            (Direction::Right, 75),
-            (Direction::Down, 30),
-            (Direction::Left, 83),
-            (Direction::Up, 83),
-        ]);
-    }
-
-    #[test]
-    fn it_can_substract_points() {
-        let p1 = Point {
-            x: 0,
-            y: 0,
-        };
-
-        assert_eq!(p1 - Point::new(5, 0), Point::new(-5, 0));
-    }
-
-    #[test]
-    fn it_can_add_points() {
-        let p1 = Point {
-            x: 0,
-            y: 0,
-        };
-
-        assert_eq!(p1 + Point::new(5, 0), Point::new(5, 0));
-    }
-
-    #[test]
-    fn it_can_build_wire_points() {
-        assert_eq!(
-            Point::from((
-                Point { x: 0, y: 0 },
-                (Direction::Right, 75),
-            )),
-            Point { x: 75, y: 0 },
-        );
-        assert_eq!(
-            Point::from((
-                Point { x: 0, y: 0 },
-                (Direction::Down, 75),
-            )),
-            Point { x: 0, y: -75 },
-        );
-        assert_eq!(
-            Point::from((
-                Point { x: 0, y: 0 },
-                (Direction::Left, 75),
-            )),
-            Point { x: -75, y: 0 },
-        );
-        assert_eq!(
-            Point::from((
-                Point { x: 0, y: 0 },
-                (Direction::Up, 75),
-            )),
-            Point { x: 0, y: 75 },
-        );
-    }
-
-    #[test]
-    fn it_can_parse_connection_paths_to_wire() {
-        let paths = parse_path(&"R75,D30,L83,U83")
-            .map(parse_direction_and_distance)
-            .collect::<Vec<DirectionDistance>>();
-
-        assert_eq!(
-            Wire::from(paths),
-            Wire {
-                points: vec![
-                    Point::new(0, 0),
-                    Point::new(75, 0),
-                    Point::new(75, -30),
-                    Point::new(-8, -30),
-                    Point::new(-8, 53),
-                ],
-            }
-        );
-    }
-
-    #[test]
-    fn it_can_fill_points_between_points() {
-        let point1 = Point::new(0, 0);
-        let point2 = Point::new(1, 0);
-
-        assert_eq!(
-            coordinates_between_points(&[point1, point2]),
-            vec![
-                Point::new(0, 0),
-                Point::new(1, 0),
-            ],
-        );
-
-        assert_eq!(
-            coordinates_between_points(&[Point::new(0, 0), Point::new(-1, 0)]),
-            vec![
-                Point::new(0, 0),
-                Point::new(-1, 0),
-            ],
-        );
-
-        assert_eq!(
-            coordinates_between_points(&[Point::new(0, 0), Point::new(0, -1)]),
-            vec![
-                Point::new(0, 0),
-                Point::new(0, -1),
-            ],
-        );
-    }
-
-    #[test]
-    fn it_can_get_coordinate_for_wire() {
-        let wire1 = Wire::from("R2,U2");
-        assert_eq!(
-            wire1.coordinates(),
-            vec![
-                Point::new(1, 0),
-                Point::new(2, 0),
-                Point::new(2, 1),
-                Point::new(2, 2),
-            ],
-        );
-    }
-
-    #[test]
-    fn it_can_deduplicate_wire_coordinates() {
-        let wire1 = Wire::from("R4,U4,L3,D4,R4");
-        let coordinates = wire1.coordinates();
-        let initial_coordinate_length = coordinates.len();
-        let deduplicated_coordinates = deduplicate_wire_coordinates(coordinates.into_iter());
-
-        assert!(initial_coordinate_length != deduplicated_coordinates.len());
-        assert_eq!(
-            deduplicated_coordinates.len(),
-            15,
-        );
-    }
-
-    #[test]
-    fn it_can_find_wire_intersection_points_coordinates() {
-        let wire1 = Wire::from("R8,U5,L5,D3");
-        let wire2 = Wire::from("U7,R6,D4,L4");
-        let intersection_points = find_intersection_points(vec![wire1, wire2]);
-
-        assert_eq!(
-            intersection_points,
-            vec![Point::new(3, 3), Point::new(6, 5)],
-        );
-        assert_eq!(
-            find_closest_intersection(vec![
-                Wire::from("R8,U5,L5,D3"),
-                Wire::from("U7,R6,D4,L4"),
-            ]),
-            6,
-        );
-    }
-
-    #[test]
-    fn it_can_find_intersection_closed_to_center() {
-        let wire1 = Wire::from("R75,D30,R83,U83,L12,D49,R71,U7,L72");
-        let wire2 = Wire::from("U62,R66,U55,R34,D71,R55,D58,R83");
-
-        assert_eq!(
-            find_closest_intersection(vec![wire1, wire2]),
-            159,
-        );
-
-        let wire1 = Wire::from("R98,U47,R26,D63,R33,U87,L62,D20,R33,U53,R51");
-        let wire2 = Wire::from("U98,R91,D20,R16,D67,R40,U7,R15,U6,R7");
-        assert_eq!(
-            find_closest_intersection(vec![wire1, wire2]),
-            135,
-        );
-    }
-}
