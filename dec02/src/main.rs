@@ -45,19 +45,19 @@ fn main() {
         source_opcodes.extend(parse_opcode_into_vector(&line.unwrap()));
     }
 
-    for (noun, verb) in NounVerb::new(99) {
-        let mut opcodes = source_opcodes.clone();
-        opcodes[1] = noun;
-        opcodes[2] = verb;
+    //for (noun, verb) in NounVerb::new(99) {
+    //    let mut opcodes = source_opcodes.clone();
+    //    opcodes[1] = noun;
+    //    opcodes[2] = verb;
 
-        let result = process(&mut opcodes)[0];
-        if result == 19690720_u32 {
-            eprintln!("Noun: {} with Verb: {} produces correct result: 100 * noun * verb is: {}", noun, verb, (100 * noun + verb));
-            break;
-        } else {
-            eprintln!("Combo {}, {} produced result: {}", noun, verb, result);
-        }
-    }
+    //    let result = process(&mut opcodes)[0];
+    //    if result == 19690720_u32 {
+    //        eprintln!("Noun: {} with Verb: {} produces correct result: 100 * noun * verb is: {}", noun, verb, (100 * noun + verb));
+    //        break;
+    //    } else {
+    //        eprintln!("Combo {}, {} produced result: {}", noun, verb, result);
+    //    }
+    //}
 }
 
 enum OptcodeInstruction {
@@ -79,6 +79,11 @@ impl OptcodeInstruction {
 
 fn parse_opcode_into_vector(raw: &str) -> Vec<u32> {
   raw.split(',').map(|s| s.parse::<u32>().unwrap()).collect()
+}
+
+enum ParameterMode {
+    Position,
+    Immediate,
 }
 
 fn get_parameter_positions(
@@ -142,24 +147,8 @@ mod test {
     }
 
     #[test]
-    fn it_can_calculate_opcodes() {
-        assert_eq!(process(&mut vec![1,0,0,0,99]), [2,0,0,0,99]);
-        assert_eq!(process(&mut vec![1,1,1,4,99,5,6,0,99]), [30,1,1,4,2,5,6,0,99]);
-    }
-
-    #[test]
-    fn it_can_iterate_over_noun_and_verb_combinations() {
-        let mut iterator = NounVerb::new(2);
-
-        assert_eq!(iterator.next(), Some((0, 0)));
-        assert_eq!(iterator.next(), Some((0, 1)));
-        assert_eq!(iterator.next(), Some((0, 2)));
-        assert_eq!(iterator.next(), Some((1, 0)));
-        assert_eq!(iterator.next(), Some((1, 1)));
-        assert_eq!(iterator.next(), Some((1, 2)));
-        assert_eq!(iterator.next(), Some((2, 0)));
-        assert_eq!(iterator.next(), Some((2, 1)));
-        assert_eq!(iterator.next(), Some((2, 2)));
-        assert_eq!(iterator.next(), None);
+    fn it_decodes_optcodes_into_instructions() {
+        let raw_line: &str = "1002,4,3,4,33";
+        let opcodes = parse_opcode_into_vector(&raw_line);
     }
 }
